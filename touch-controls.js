@@ -48,8 +48,12 @@
         requestAnimationFrame(() => draw());
     }
 
-    // Handle panning canvas
+    // Handle panning canvas (only if not dragging)
     function handlePanStart(e) {
+        if (draggedItem) {
+            return; // If an item is being dragged, disable panning
+        }
+
         e.preventDefault();
         if (e.touches.length === 1) { // Start panning with one finger
             isPanning = true;
@@ -59,6 +63,10 @@
     }
 
     function handlePanMove(e) {
+        if (draggedItem) {
+            return; // If an item is being dragged, disable panning
+        }
+
         if (!isPanning) return;
 
         const deltaX = e.touches[0].pageX - startPanX;
@@ -99,7 +107,7 @@
             handleZoom(e);
         }
 
-        // Begin panning if the user starts moving with one finger
+        // Begin panning if the user starts moving with one finger (unless dragging)
         handlePanStart(e);
     });
 
