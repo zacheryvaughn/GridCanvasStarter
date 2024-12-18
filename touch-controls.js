@@ -111,7 +111,9 @@
         }
 
         // Handle panning if active
-        handlePanMove(e);
+        if (!isDragging) {
+            handlePanMove(e);
+        }
 
         // If dragging, move the item with finger
         if (draggedItem && draggedItem.isDragging) {
