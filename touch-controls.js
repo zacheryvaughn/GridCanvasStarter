@@ -10,51 +10,44 @@
     let startPanY = 0;
     let lastDistance = 0; // Track the pinch distance for zoom
     let startX = 0, startY = 0; // For tracking object dragging position
+    let initialTap = { x: 0, y: 0 }; // Store initial tap position for detection
+    let tapTimeout = null; // Timeout for detecting a tap and hold action
+    const tapThreshold = 10; // Minimal movement to prevent accidental drag from panning
 
     // Handle pinch-to-zoom
     function handleZoom(e) {
         e.preventDefault();
-
-        // If there are fewer than 2 touches, exit
+        
+        // Zoom logic as before...
         if (e.touches.length < 2) return;
 
-        // Calculate pinch distance between two touches
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
         const newDistance = Math.hypot(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
 
-        // If there's no previous distance, save the first value
         if (lastDistance === 0) {
             lastDistance = newDistance;
             return;
         }
 
-        // Calculate zoom scale
         const scaleFactor = newDistance / lastDistance;
         const newScale = Math.max(0.5, Math.min(scale * scaleFactor, 15));
+        const mouseX = (touch1.pageX + touch2.pageX) / 2;
+        const mouseY = (touch1.pageY + touch2.pageY) / 2;
 
-        // Set zoom center (position where pinch is happening on canvas)
-        const mouseX = (touch1.pageX + touch2.pageX) / 2 * pixelRatio;
-        const mouseY = (touch1.pageY + touch2.pageY) / 2 * pixelRatio;
         const mouseXInWorld = (mouseX - originX) / scale;
         const mouseYInWorld = (mouseY - originY) / scale;
 
         originX = mouseX - mouseXInWorld * newScale;
         originY = mouseY - mouseYInWorld * newScale;
-
         scale = newScale;
-        lastDistance = newDistance; // Update lastDistance
+        lastDistance = newDistance;
 
         requestAnimationFrame(() => draw());
     }
 
-    // Handle panning canvas (only if not dragging)
+    // Handle panning canvas
     function handlePanStart(e) {
-        if (draggedItem) {
-            return; // If an item is being dragged, do not start panning
-        }
-
-        e.preventDefault();
         if (e.touches.length === 1) { // Start panning with one finger
             isPanning = true;
             startPanX = e.touches[0].pageX;
@@ -81,34 +74,31 @@
         isPanning = false;
     }
 
-    // Handle item dragging (tap and hold) – Ensure dragging doesn't happen if panning is active
-    let tapTimeout = null;
+    // Handle item dragging (tap-then-hold)
     canvas.addEventListener('touchstart', function(e) {
-        // Prevent dragging if two fingers are on the screen (zooming)
-        if (e.touches.length === 2) {
-            return; // Two-finger touch detected, ignore drag action
-        }
-
         const { x, y } = getTouchPosition(e);
 
-        // Detect tap and hold for dragging item
-        if (e.touches.length === 1 && !isPanning) { // Only allow dragging when not panning
+        // Start tracking position for tap
+        if (e.touches.length === 1) {
+            initialTap.x = x;
+            initialTap.y = y;
             tapTimeout = setTimeout(() => {
-                draggedItem = findItem(x, y); // Detect if an item was tapped
+                // After 0.8s, we check if there was enough time to qualify as a hold.
+                draggedItem = findItem(x, y);
                 if (draggedItem) {
                     draggedItem.isDragging = true;
-                    startX = x - draggedItem.x; // Record the initial position offset
+                    startX = x - draggedItem.x;
                     startY = y - draggedItem.y;
                 }
-            }, 500); // Tap and hold time for triggering drag action
+            }, 800); // Trigger drag after 0.8s hold
         }
 
-        // If two touches are detected, start zoom (pinch-to-zoom)
+        // If two touches are detected, it's zoom
         if (e.touches.length === 2) {
             handleZoom(e);
         }
 
-        // Begin panning if the user starts moving with one finger (unless dragging)
+        // Begin panning if the user starts with one finger
         handlePanStart(e);
     });
 
@@ -120,24 +110,30 @@
             handleZoom(e);
         }
 
-        // If panning, handle panning
+        // Handle panning if active
         handlePanMove(e);
 
-        // If dragging, handle item dragging (unless panning)
-        if (draggedItem && draggedItem.isDragging && !isPanning) {
+        // If dragging, move the item with finger
+        if (draggedItem && draggedItem.isDragging) {
             const { x, y } = getTouchPosition(e);
             draggedItem.x = Math.round((x - startX) / 8) * 8;  // Keep grid snapping
             draggedItem.y = Math.round((y - startY) / 8) * 8;
 
             requestAnimationFrame(() => draw());
+        } else if (e.touches.length === 1) {
+            const currentTapDistance = Math.hypot(x - initialTap.x, y - initialTap.y);
+
+            // Only start dragging after a proper tap with minimal movement (prevents accidental drag)
+            if (currentTapDistance > tapThreshold) {
+                clearTimeout(tapTimeout);  // If there's enough movement, cancel the hold timeout
+            }
         }
     });
 
     canvas.addEventListener('touchend', function(e) {
-        // Clear pan state if done
+        // End pan and drag
         handlePanEnd();
 
-        // Stop dragging item
         if (draggedItem) {
             draggedItem.isDragging = false;
             draggedItem = null;
