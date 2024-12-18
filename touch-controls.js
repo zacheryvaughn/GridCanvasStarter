@@ -51,7 +51,7 @@
     // Handle panning canvas (only if not dragging)
     function handlePanStart(e) {
         if (draggedItem) {
-            return; // If an item is being dragged, or if there are two fingers, disable panning
+            return; // If an item is being dragged, do not start panning
         }
 
         e.preventDefault();
@@ -63,10 +63,6 @@
     }
 
     function handlePanMove(e) {
-        if (draggedItem || e.touches.length > 1) {
-            return; // If an item is being dragged, or if there are two fingers, disable panning
-        }
-
         if (!isPanning) return;
 
         const deltaX = e.touches[0].pageX - startPanX;
@@ -85,10 +81,10 @@
         isPanning = false;
     }
 
-    // Handle item dragging (tap and hold) – Ensure dragging doesn't happen if two fingers are on screen
+    // Handle item dragging (tap and hold) – Ensure dragging doesn't happen if panning is active
     let tapTimeout = null;
     canvas.addEventListener('touchstart', function(e) {
-        // Prevent dragging if there are two touches
+        // Prevent dragging if two fingers are on the screen (zooming)
         if (e.touches.length === 2) {
             return; // Two-finger touch detected, ignore drag action
         }
@@ -96,7 +92,7 @@
         const { x, y } = getTouchPosition(e);
 
         // Detect tap and hold for dragging item
-        if (e.touches.length === 1) {
+        if (e.touches.length === 1 && !isPanning) { // Only allow dragging when not panning
             tapTimeout = setTimeout(() => {
                 draggedItem = findItem(x, y); // Detect if an item was tapped
                 if (draggedItem) {
@@ -127,8 +123,8 @@
         // If panning, handle panning
         handlePanMove(e);
 
-        // If dragging, handle item dragging (unless zooming with two fingers)
-        if (draggedItem && draggedItem.isDragging && e.touches.length === 1 && !isPanning) {
+        // If dragging, handle item dragging (unless panning)
+        if (draggedItem && draggedItem.isDragging && !isPanning) {
             const { x, y } = getTouchPosition(e);
             draggedItem.x = Math.round((x - startX) / 8) * 8;  // Keep grid snapping
             draggedItem.y = Math.round((y - startY) / 8) * 8;
