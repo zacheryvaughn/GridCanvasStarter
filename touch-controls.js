@@ -48,7 +48,7 @@
 
     // Handle panning canvas
     function handlePanStart(e) {
-        if (e.touches.length === 1) { // Start panning with one finger
+        if (e.touches.length === 1 && !draggedItem) { // Start panning with one finger
             isPanning = true;
             startPanX = e.touches[0].pageX;
             startPanY = e.touches[0].pageY;
@@ -111,9 +111,9 @@
         }
 
         // Handle panning if active
-        if (!isDragging) {
+        if (!draggedItem) {
             handlePanMove(e);
-        }
+        } 
 
         // If dragging, move the item with finger
         if (draggedItem && draggedItem.isDragging) {
