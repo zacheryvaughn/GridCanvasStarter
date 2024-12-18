@@ -13,11 +13,12 @@
     let initialTap = { x: 0, y: 0 }; // Store initial tap position for detection
     let tapTimeout = null; // Timeout for detecting a tap and hold action
     const tapThreshold = 10; // Minimal movement to prevent accidental drag from panning
+    let isTapComplete = false;  // Flag for tap detection
 
     // Handle pinch-to-zoom
     function handleZoom(e) {
         e.preventDefault();
-        
+
         // Zoom logic as before...
         if (e.touches.length < 2) return;
 
@@ -48,7 +49,7 @@
 
     // Handle panning canvas
     function handlePanStart(e) {
-        if (e.touches.length === 1 && !draggedItem) { // Start panning with one finger
+        if (e.touches.length === 1 && !draggedItem && !isTapComplete) { // Start panning with one finger
             isPanning = true;
             startPanX = e.touches[0].pageX;
             startPanY = e.touches[0].pageY;
@@ -78,19 +79,24 @@
     canvas.addEventListener('touchstart', function(e) {
         const { x, y } = getTouchPosition(e);
 
-        // Start tracking position for tap
+        // Only track tap when no item is being dragged and not in hold state
         if (e.touches.length === 1) {
             initialTap.x = x;
             initialTap.y = y;
-            tapTimeout = setTimeout(() => {
-                // After 0.8s, we check if there was enough time to qualify as a hold.
-                draggedItem = findItem(x, y);
-                if (draggedItem) {
-                    draggedItem.isDragging = true;
-                    startX = x - draggedItem.x;
-                    startY = y - draggedItem.y;
-                }
-            }, 800); // Trigger drag after 0.8s hold
+
+            // Tap detection logic (tap must be quick, no drag initiated yet)
+            if (!draggedItem && !isTapComplete) {
+                tapTimeout = setTimeout(() => {
+                    // If touch is held for 0.8s, allow dragging
+                    isTapComplete = true; // Mark that tap has been completed
+                    draggedItem = findItem(x, y);
+                    if (draggedItem) {
+                        draggedItem.isDragging = true;
+                        startX = x - draggedItem.x;
+                        startY = y - draggedItem.y;
+                    }
+                }, 800); // 0.8s hold to initiate dragging
+            }
         }
 
         // If two touches are detected, it's zoom
@@ -113,7 +119,7 @@
         // Handle panning if active
         if (!draggedItem) {
             handlePanMove(e);
-        } 
+        }
 
         // If dragging, move the item with finger
         if (draggedItem && draggedItem.isDragging) {
@@ -143,6 +149,9 @@
 
         // Reset zoom variables
         lastDistance = 0;
+
+        // After touchend, reset tap tracking
+        isTapComplete = false;
     });
 
     // Utility function to get touch position
@@ -161,5 +170,4 @@
             y >= rect.y && y <= rect.y + rect.height
         );
     }
-
 })();
