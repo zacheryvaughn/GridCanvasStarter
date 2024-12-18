@@ -9,6 +9,7 @@ body {
   height: calc(100vh - 40px);
   background-color: #16171A;
   overflow: hidden;
+  touch-action: none;
 }
 
 #canvas {
