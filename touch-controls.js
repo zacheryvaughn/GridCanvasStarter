@@ -51,7 +51,7 @@
     // Handle panning canvas
     function handlePanStart(e) {
         e.preventDefault();
-        if (e.touches.length === 1 && !draggedItem) { // Start panning with one finger only if not dragging
+        if (e.touches.length === 1) { // Start panning with one finger
             isPanning = true;
             startPanX = e.touches[0].pageX;
             startPanY = e.touches[0].pageY;
@@ -64,8 +64,8 @@
         const deltaX = e.touches[0].pageX - startPanX;
         const deltaY = e.touches[0].pageY - startPanY;
 
-        originX += deltaX * 0.5 / scale;  // Adjust pan speed: apply a factor to speed up panning
-        originY += deltaY * 0.5 / scale;
+        originX += deltaX * pixelRatio;
+        originY += deltaY * pixelRatio;
 
         startPanX = e.touches[0].pageX;
         startPanY = e.touches[0].pageY;
