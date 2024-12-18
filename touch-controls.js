@@ -50,8 +50,8 @@
 
     // Handle panning canvas (only if not dragging)
     function handlePanStart(e) {
-        if (draggedItem) {
-            return; // If an item is being dragged, disable panning
+        if (draggedItem || e.touches.length > 1) {
+            return; // If an item is being dragged, or if there are two fingers, disable panning
         }
 
         e.preventDefault();
@@ -63,8 +63,8 @@
     }
 
     function handlePanMove(e) {
-        if (draggedItem) {
-            return; // If an item is being dragged, disable panning
+        if (draggedItem || e.touches.length > 1) {
+            return; // If an item is being dragged, or if there are two fingers, disable panning
         }
 
         if (!isPanning) return;
@@ -85,9 +85,14 @@
         isPanning = false;
     }
 
-    // Handle item dragging (tap and hold)
+    // Handle item dragging (tap and hold) – Ensure dragging doesn't happen if two fingers are on screen
     let tapTimeout = null;
     canvas.addEventListener('touchstart', function(e) {
+        // Prevent dragging if there are two touches
+        if (e.touches.length === 2) {
+            return; // Two-finger touch detected, ignore drag action
+        }
+
         const { x, y } = getTouchPosition(e);
 
         // Detect tap and hold for dragging item
@@ -122,8 +127,8 @@
         // If panning, handle panning
         handlePanMove(e);
 
-        // If dragging, handle item dragging
-        if (draggedItem && draggedItem.isDragging) {
+        // If dragging, handle item dragging (unless zooming with two fingers)
+        if (draggedItem && draggedItem.isDragging && e.touches.length === 1) {
             const { x, y } = getTouchPosition(e);
             draggedItem.x = Math.round((x - startX) / 8) * 8;  // Keep grid snapping
             draggedItem.y = Math.round((y - startY) / 8) * 8;
