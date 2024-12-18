@@ -50,7 +50,7 @@
 
     // Handle panning canvas (only if not dragging)
     function handlePanStart(e) {
-        if (draggedItem || e.touches.length > 1) {
+        if (draggedItem) {
             return; // If an item is being dragged, or if there are two fingers, disable panning
         }
 
@@ -128,7 +128,7 @@
         handlePanMove(e);
 
         // If dragging, handle item dragging (unless zooming with two fingers)
-        if (draggedItem && draggedItem.isDragging && e.touches.length === 1) {
+        if (draggedItem && draggedItem.isDragging && e.touches.length === 1 && !isPanning) {
             const { x, y } = getTouchPosition(e);
             draggedItem.x = Math.round((x - startX) / 8) * 8;  // Keep grid snapping
             draggedItem.y = Math.round((y - startY) / 8) * 8;
