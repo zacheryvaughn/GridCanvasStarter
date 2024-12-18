@@ -6,6 +6,7 @@ let touchOriginY = 0;
 function handlePinchZoom() {
     canvas.addEventListener('touchstart', (e) => {
         if (e.touches.length === 2) {
+            e.preventDefault();
             // Calculate the initial distance between touches
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -19,6 +20,7 @@ function handlePinchZoom() {
 
     canvas.addEventListener('touchmove', (e) => {
         if (e.touches.length === 2) {
+            e.preventDefault();
             // Calculate the new distance between touches
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
