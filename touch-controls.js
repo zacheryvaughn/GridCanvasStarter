@@ -1,4 +1,3 @@
-// touchControls.js
 (function() {
     const canvas = document.getElementById("canvas");
     const c = canvas.getContext("2d");
@@ -6,7 +5,7 @@
     // Variables
     let isPanning = false;
     let isZooming = false;
-    let dragItem = null;
+    let draggedItem = null;
     let startPanX = 0;
     let startPanY = 0;
     let lastDistance = 0; // Track the pinch distance for zoom
@@ -87,7 +86,11 @@
         if (e.touches.length === 1) {
             tapTimeout = setTimeout(() => {
                 draggedItem = findItem(x, y); // Detect if an item was tapped
-                if (draggedItem) draggedItem.isDragging = true;
+                if (draggedItem) {
+                    draggedItem.isDragging = true;
+                    startX = x - draggedItem.x; // Record the initial position offset
+                    startY = y - draggedItem.y;
+                }
             }, 500); // Tap and hold time for triggering drag action
         }
 
@@ -114,8 +117,9 @@
         // If dragging, handle item dragging
         if (draggedItem && draggedItem.isDragging) {
             const { x, y } = getTouchPosition(e);
-            draggedItem.x = x - startX; // Update item position
-            draggedItem.y = y - startY;
+            draggedItem.x = Math.round((x - startX) / 8) * 8;  // Keep grid snapping
+            draggedItem.y = Math.round((y - startY) / 8) * 8;
+
             requestAnimationFrame(() => draw());
         }
     });
@@ -136,8 +140,11 @@
 
     // Utility function to get touch position
     function getTouchPosition(e) {
-        const touch = e.touches ? e.touches[0] : e;
-        return { x: touch.pageX, y: touch.pageY };
+        const touch = e.touches ? e.touches[0] : e; // Touch or mouse event
+        const canvasRect = canvas.getBoundingClientRect();
+        const mouseX = (touch.pageX - canvasRect.left) * pixelRatio / scale - originX / scale;
+        const mouseY = (touch.pageY - canvasRect.top) * pixelRatio / scale - originY / scale;
+        return { x: mouseX, y: mouseY };
     }
 
     // Utility to check if a point is within an item (rectangle)
