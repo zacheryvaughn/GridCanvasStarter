@@ -17,11 +17,12 @@
     // Handle pinch-to-zoom
     function handleZoom(e) {
         e.preventDefault();
-
+        
+        // Zoom logic as before...
         if (e.touches.length < 2) return;
 
         const touch1 = e.touches[0];
-        const touch2 = e.tches[1];
+        const touch2 = e.touches[1];
         const newDistance = Math.hypot(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
 
         if (lastDistance === 0) {
@@ -47,7 +48,7 @@
 
     // Handle panning canvas
     function handlePanStart(e) {
-        if (e.touches.length === 1 && !draggedItem) { // Only start panning if not dragging
+        if (e.touches.length === 1) { // Start panning with one finger
             isPanning = true;
             startPanX = e.touches[0].pageX;
             startPanY = e.touches[0].pageY;
@@ -110,9 +111,7 @@
         }
 
         // Handle panning if active
-        if (draggedItem === null) { // Only allow panning if no item is being dragged
-            handlePanMove(e);
-        }
+        handlePanMove(e);
 
         // If dragging, move the item with finger
         if (draggedItem && draggedItem.isDragging) {
