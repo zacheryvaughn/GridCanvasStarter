@@ -16,4 +16,5 @@ ___
 - Hold Right Mouse Button: Move Canvas
 - Click Scroll Wheel Button: Re-Center Canvas
 
+___
 ![Image](img.png)
