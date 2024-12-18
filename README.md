@@ -17,4 +17,4 @@ ___
 - Click Scroll Wheel Button: Re-Center Canvas
 
 ___
-![Image](img.png)
+![Image](image.png)
