@@ -104,7 +104,6 @@ function handleTouchEvents() {
 function handleDoubleTap(e) {
     const currentTime = new Date().getTime();
     if (doubleTapTimeout && currentTime - doubleTapTimeout < 300) {
-        scale = pixelRatio;
         centerOrigin();
         draw();
         doubleTapTimeout = null;
