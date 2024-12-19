@@ -10,11 +10,18 @@ ___
 - Auto Z-Index Swapping
 
 ___
-**Controls:**
+**Mouse Controls:**
 - Scroll Wheel: Zoom Canvas
-- Hold Left Mouse Button: Move Item
 - Hold Right Mouse Button: Move Canvas
 - Click Scroll Wheel Button: Re-Center Canvas
+- Hold Left Mouse Button: Drag Item
+
+___
+**Touch Gestures:**
+- Two-Finger Pinch: Zoom Canvas
+- Two-Finger Touch: Move Canvas
+- Double-Tap: Re-Center Canvas
+- One-Finger Touch: Drag Item
 
 ___
 ![Image](image.png)
