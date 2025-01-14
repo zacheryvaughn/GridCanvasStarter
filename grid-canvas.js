@@ -1,4 +1,9 @@
-// Configuration constants
+/**
+ * Interactive Grid Canvas
+ * Copyright (c) 2025 Zachery Vaughn
+ * MIT License - see LICENSE file in the root directory
+ */
+
 const CONFIG = {
     CANVAS: {
         MIN_SCALE: 0.5,
@@ -30,7 +35,6 @@ const CONFIG = {
     }
 };
 
-// Canvas State Class
 class CanvasState {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -42,7 +46,6 @@ class CanvasState {
         this.isPanning = false;
         this.animationFrameId = null;
         
-        // Initialize canvas
         this.setupCanvas();
         this.initializeEventListeners();
     }
@@ -93,7 +96,6 @@ class CanvasState {
     }
 }
 
-// Grid Rendering Class
 class GridRenderer {
     constructor(canvasState) {
         this.state = canvasState;
@@ -148,7 +150,6 @@ class GridRenderer {
         const bounds = this.getViewportBounds();
         let smallGridSize = null;
 
-        // Determine small grid size based on zoom level
         if (this.state.scale >= 2.8) {
             smallGridSize = CONFIG.GRID.SMALL.HIGH_ZOOM;
         } else if (this.state.scale >= 1.4) {
@@ -157,7 +158,6 @@ class GridRenderer {
             smallGridSize = CONFIG.GRID.SMALL.LOW_ZOOM;
         }
 
-        // Draw grids
         if (smallGridSize) {
             this.drawGridLines(bounds, smallGridSize, CONFIG.GRID.SMALL.COLOR);
         }
@@ -166,7 +166,6 @@ class GridRenderer {
     }
 }
 
-// Rectangle Class
 class Rectangle {
     constructor(x, y, width, height, color) {
         this.x = x;
@@ -190,7 +189,6 @@ class Rectangle {
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
         
-        // Draw coordinates
         ctx.font = CONFIG.RECTANGLE.FONT;
         ctx.fillStyle = CONFIG.RECTANGLE.TEXT_COLOR;
         ctx.fillText(
@@ -206,7 +204,6 @@ class Rectangle {
     }
 }
 
-// Interactive Canvas Implementation
 class InteractiveCanvas extends CanvasState {
     constructor(canvasId) {
         super(canvasId);
@@ -230,17 +227,14 @@ class InteractiveCanvas extends CanvasState {
     }
 
     initializeEventListeners() {
-        // Zoom handling
         this.canvas.addEventListener('wheel', this.handleZoom.bind(this));
         
-        // Pan handling
         this.canvas.addEventListener('contextmenu', e => e.preventDefault());
         this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
         this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
         this.canvas.addEventListener('mouseout', this.handleMouseOut.bind(this));
         
-        // Window resize handling
         this.resizeObserver = new ResizeObserver(() => {
             this.resizeCanvasToDisplaySize();
             this.scheduleRedraw();
@@ -267,7 +261,6 @@ class InteractiveCanvas extends CanvasState {
             Math.min(this.scale * scaleFactor, CONFIG.CANVAS.MAX_SCALE)
         );
         
-        // Adjust origin to maintain mouse position
         this.originX = e.offsetX * this.pixelRatio - coords.x * newScale;
         this.originY = e.offsetY * this.pixelRatio - coords.y * newScale;
         
@@ -276,11 +269,11 @@ class InteractiveCanvas extends CanvasState {
     }
 
     handleMouseDown(e) {
-        if (e.button === 2) { // Right click - Start panning
+        if (e.button === 2) {
             this.startPanning(e);
-        } else if (e.button === 0) { // Left click - Start dragging rectangle
+        } else if (e.button === 0) {
             this.startDraggingRectangle(e);
-        } else if (e.button === 1) { // Middle click - Center canvas
+        } else if (e.button === 1) {
             this.centerOrigin();
             this.scheduleRedraw();
         }
@@ -337,7 +330,6 @@ class InteractiveCanvas extends CanvasState {
     startDraggingRectangle(e) {
         const coords = this.getWorldCoordinates(e.clientX, e.clientY);
         
-        // Search rectangles from top to bottom
         for (let i = this.rectangles.length - 1; i >= 0; i--) {
             const rect = this.rectangles[i];
             if (rect.containsPoint(coords.x, coords.y)) {
@@ -348,7 +340,6 @@ class InteractiveCanvas extends CanvasState {
                 };
                 rect.isDragging = true;
                 
-                // Move rectangle to top
                 this.rectangles.splice(i, 1);
                 this.rectangles.push(rect);
                 
@@ -370,12 +361,10 @@ class InteractiveCanvas extends CanvasState {
     }
 
     draw() {
-        // Clear canvas and prepare transformation
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.save();
         this.ctx.setTransform(this.scale, 0, 0, this.scale, this.originX, this.originY);
         
-        // Draw grid and rectangles
         this.gridRenderer.draw();
         this.rectangles.forEach(rect => rect.draw(this.ctx));
         
@@ -383,5 +372,4 @@ class InteractiveCanvas extends CanvasState {
     }
 }
 
-// Initialize the canvas
 const canvas = new InteractiveCanvas('canvas');
