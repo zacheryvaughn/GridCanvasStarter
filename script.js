@@ -1,293 +1,387 @@
-const canvas = document.getElementById('canvas');
-const c = canvas.getContext('2d');
+// Configuration constants
+const CONFIG = {
+    CANVAS: {
+        MIN_SCALE: 0.5,
+        MAX_SCALE: 15,
+        SCALE_STEP: 1.03,
+        SCALE_RATE: 0.04,
+        INITIAL_SCALE: 1.3,
+    },
+    GRID: {
+        SMALL: {
+            HIGH_ZOOM: 8,
+            MEDIUM_ZOOM: 16,
+            LOW_ZOOM: 32,
+            COLOR: '#2B2F33'
+        },
+        LARGE: {
+            SIZE: 64,
+            COLOR: '#4C5259'
+        },
+        ORIGIN_CROSS_SIZE: 16,
+        ORIGIN_COLOR: '#FFFFFF'
+    },
+    RECTANGLE: {
+        SNAP_SIZE: 8,
+        FONT: '8px Arial',
+        TEXT_COLOR: '#000000',
+        TEXT_OFFSET_X: 5,
+        TEXT_OFFSET_Y: 10
+    }
+};
 
-// Initialize some Important Values
-let draggedRect = null;
-let offsetX = 0;
-let offsetY = 0;
-let originX = 0;
-let originY = 0;
-let isZooming = false;
-let isPanning = false;
+// Canvas State Class
+class CanvasState {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.pixelRatio = window.devicePixelRatio || 1;
+        this.scale = CONFIG.CANVAS.INITIAL_SCALE * this.pixelRatio;
+        this.originX = 0;
+        this.originY = 0;
+        this.isPanning = false;
+        this.animationFrameId = null;
+        
+        // Initialize canvas
+        this.setupCanvas();
+        this.initializeEventListeners();
+    }
 
-// Detect Device Pixel Ratio
-let pixelRatio = window.devicePixelRatio || 1;
-let scale = 1.3 * pixelRatio;
+    setupCanvas() {
+        if (!this.canvas || !this.ctx) {
+            console.error('Canvas not supported in this browser');
+            return;
+        }
+        this.resizeCanvasToDisplaySize();
+        this.centerOrigin();
+        this.scheduleRedraw();
+    }
 
-// Resizes the Canvas Dimensions based on Pixel Ratio
-function resizecanvasToDisplaySize() {
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    canvas.width = width * pixelRatio;
-    canvas.height = height * pixelRatio;
-    c.scale(pixelRatio, pixelRatio);
+    resizeCanvasToDisplaySize() {
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight;
+        this.canvas.width = width * this.pixelRatio;
+        this.canvas.height = height * this.pixelRatio;
+        this.ctx.scale(this.pixelRatio, this.pixelRatio);
+    }
+
+    centerOrigin() {
+        this.originX = this.canvas.width / 2;
+        this.originY = this.canvas.height / 2;
+    }
+
+    scheduleRedraw() {
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+        }
+        this.animationFrameId = requestAnimationFrame(() => this.draw());
+    }
+
+    getWorldCoordinates(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+            x: (clientX - rect.left) * this.pixelRatio / this.scale - this.originX / this.scale,
+            y: (clientY - rect.top) * this.pixelRatio / this.scale - this.originY / this.scale
+        };
+    }
+
+    cleanup() {
+        this.removeEventListeners();
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+        }
+    }
 }
 
-// Move Origin to the Center of Canvas
-// (Top-Left is the canvas origin, but we want it in the center)
-function centerOrigin() {
-    originX = canvas.width / 2;
-    originY = canvas.height / 2;
+// Grid Rendering Class
+class GridRenderer {
+    constructor(canvasState) {
+        this.state = canvasState;
+    }
+
+    getViewportBounds() {
+        const canvasMinX = -this.state.originX / this.state.scale;
+        const canvasMinY = -this.state.originY / this.state.scale;
+        return {
+            minX: canvasMinX,
+            minY: canvasMinY,
+            maxX: canvasMinX + this.state.canvas.width / this.state.scale,
+            maxY: canvasMinY + this.state.canvas.height / this.state.scale
+        };
+    }
+
+    drawGridLines(bounds, gridSize, color) {
+        const ctx = this.state.ctx;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1 / this.state.scale;
+
+        const startX = Math.floor(bounds.minX / gridSize) * gridSize;
+        const startY = Math.floor(bounds.minY / gridSize) * gridSize;
+
+        ctx.beginPath();
+        for (let x = startX; x <= bounds.maxX; x += gridSize) {
+            ctx.moveTo(x, bounds.minY);
+            ctx.lineTo(x, bounds.maxY);
+        }
+        for (let y = startY; y <= bounds.maxY; y += gridSize) {
+            ctx.moveTo(bounds.minX, y);
+            ctx.lineTo(bounds.maxX, y);
+        }
+        ctx.stroke();
+    }
+
+    drawOriginCross() {
+        const ctx = this.state.ctx;
+        const size = CONFIG.GRID.ORIGIN_CROSS_SIZE;
+        
+        ctx.strokeStyle = CONFIG.GRID.ORIGIN_COLOR;
+        ctx.lineWidth = 1 / this.state.scale;
+        ctx.beginPath();
+        ctx.moveTo(-size, 0);
+        ctx.lineTo(size, 0);
+        ctx.moveTo(0, -size);
+        ctx.lineTo(0, size);
+        ctx.stroke();
+    }
+
+    draw() {
+        const bounds = this.getViewportBounds();
+        let smallGridSize = null;
+
+        // Determine small grid size based on zoom level
+        if (this.state.scale >= 2.8) {
+            smallGridSize = CONFIG.GRID.SMALL.HIGH_ZOOM;
+        } else if (this.state.scale >= 1.4) {
+            smallGridSize = CONFIG.GRID.SMALL.MEDIUM_ZOOM;
+        } else if (this.state.scale >= 0.7) {
+            smallGridSize = CONFIG.GRID.SMALL.LOW_ZOOM;
+        }
+
+        // Draw grids
+        if (smallGridSize) {
+            this.drawGridLines(bounds, smallGridSize, CONFIG.GRID.SMALL.COLOR);
+        }
+        this.drawGridLines(bounds, CONFIG.GRID.LARGE.SIZE, CONFIG.GRID.LARGE.COLOR);
+        this.drawOriginCross();
+    }
 }
 
-function handleZooming() {
-    const zoomHandler = (e) => {
+// Rectangle Class
+class Rectangle {
+    constructor(x, y, width, height, color) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+        this.isDragging = false;
+    }
+
+    containsPoint(x, y) {
+        return (
+            x >= this.x &&
+            x <= this.x + this.width &&
+            y >= this.y &&
+            y <= this.y + this.height
+        );
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        
+        // Draw coordinates
+        ctx.font = CONFIG.RECTANGLE.FONT;
+        ctx.fillStyle = CONFIG.RECTANGLE.TEXT_COLOR;
+        ctx.fillText(
+            `X: ${this.x}, Y: ${this.y * -1}`,
+            this.x + CONFIG.RECTANGLE.TEXT_OFFSET_X,
+            this.y + CONFIG.RECTANGLE.TEXT_OFFSET_Y
+        );
+    }
+
+    snapToGrid() {
+        this.x = Math.round(this.x / CONFIG.RECTANGLE.SNAP_SIZE) * CONFIG.RECTANGLE.SNAP_SIZE;
+        this.y = Math.round(this.y / CONFIG.RECTANGLE.SNAP_SIZE) * CONFIG.RECTANGLE.SNAP_SIZE;
+    }
+}
+
+// Interactive Canvas Implementation
+class InteractiveCanvas extends CanvasState {
+    constructor(canvasId) {
+        super(canvasId);
+        this.gridRenderer = new GridRenderer(this);
+        this.rectangles = this.initializeRectangles();
+        this.draggedRect = null;
+        this.dragOffset = { x: 0, y: 0 };
+    }
+
+    initializeRectangles() {
+        return [
+            new Rectangle(-144, -120, 120, 160, '#ff6961'),
+            new Rectangle(48, -88, 104, 96, '#f8f38d'),
+            new Rectangle(-192, -48, 128, 112, '#08cad1'),
+            new Rectangle(72, 16, 112, 136, '#9d94ff'),
+            new Rectangle(-80, 40, 104, 104, '#c780e8'),
+            new Rectangle(64, -128, 144, 104, '#59adf6'),
+            new Rectangle(-56, 72, 120, 104, '#42d6a4'),
+            new Rectangle(-16, -144, 96, 80, '#ffb480')
+        ];
+    }
+
+    initializeEventListeners() {
+        // Zoom handling
+        this.canvas.addEventListener('wheel', this.handleZoom.bind(this));
+        
+        // Pan handling
+        this.canvas.addEventListener('contextmenu', e => e.preventDefault());
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        this.canvas.addEventListener('mouseout', this.handleMouseOut.bind(this));
+        
+        // Window resize handling
+        this.resizeObserver = new ResizeObserver(() => {
+            this.resizeCanvasToDisplaySize();
+            this.scheduleRedraw();
+        });
+        this.resizeObserver.observe(this.canvas);
+        
+        window.addEventListener('resize', () => {
+            this.resizeCanvasToDisplaySize();
+            this.scheduleRedraw();
+        });
+    }
+
+    handleZoom(e) {
         e.preventDefault();
-
-        const scaleStep = 1.03;
-        const scaleRate = 0.04;
-        const scaleFactor = Math.pow(scaleStep, -e.deltaY * scaleRate);
-
-        const mouseX = e.offsetX * pixelRatio;
-        const mouseY = e.offsetY * pixelRatio;
-        const mouseXInWorld = (mouseX - originX) / scale;
-        const mouseYInWorld = (mouseY - originY) / scale;
-
-        const newScale = Math.max(0.5, Math.min(scale * scaleFactor, 15));
-
-        originX = mouseX - mouseXInWorld * newScale;
-        originY = mouseY - mouseYInWorld * newScale;
-
-        scale = newScale;
-
-        requestAnimationFrame(() => draw());
-    };
-
-    canvas.addEventListener('wheel', zoomHandler);
-}
-handleZooming();
-
-
-// Handle Panning the Canvas with Right Mouse Button Hold
-function handlePanning() {
-    let startX = 0;
-    let startY = 0;
-
-    canvas.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-    });
-
-    canvas.addEventListener('mousedown', (e) => {
-        if (e.button === 2) {
-            isPanning = true;
-            startX = (e.clientX * pixelRatio) - originX;
-            startY = (e.clientY * pixelRatio) - originY;
-            canvas.style.cursor = 'grabbing';
-        }
-    });
-
-    canvas.addEventListener('mousemove', (e) => {
-        if (isPanning) {
-            originX = (e.clientX * pixelRatio) - startX;
-            originY = (e.clientY * pixelRatio) - startY;
-            requestAnimationFrame(() => draw());
-        }
-    });
-
-    canvas.addEventListener('mouseup', (e) => {
-        if (isPanning && e.button === 2) {
-            isPanning = false;
-            canvas.style.cursor = 'default';
-        }
-    });
-
-    canvas.addEventListener('mouseout', () => {
-        if (isPanning) {
-            isPanning = false;
-            canvas.style.cursor = 'default';
-        }
-    });
-}
-handlePanning();
-
-// Draw grid with dynamic size based on zoom level
-function drawGrid() {
-    // Determine small grid size based on the scale
-    let smallGridSize;
-    if (scale >= 2.8) {
-        smallGridSize = 8;
-    } else if (scale >= 1.4) {
-        smallGridSize = 16;
-    } else if (scale >= 0.7) {
-        smallGridSize = 32;
-    } else {
-        smallGridSize = null;
+        const coords = this.getWorldCoordinates(e.clientX, e.clientY);
+        
+        const scaleFactor = Math.pow(
+            CONFIG.CANVAS.SCALE_STEP,
+            -e.deltaY * CONFIG.CANVAS.SCALE_RATE
+        );
+        
+        const newScale = Math.max(
+            CONFIG.CANVAS.MIN_SCALE,
+            Math.min(this.scale * scaleFactor, CONFIG.CANVAS.MAX_SCALE)
+        );
+        
+        // Adjust origin to maintain mouse position
+        this.originX = e.offsetX * this.pixelRatio - coords.x * newScale;
+        this.originY = e.offsetY * this.pixelRatio - coords.y * newScale;
+        
+        this.scale = newScale;
+        this.scheduleRedraw();
     }
 
-    // Calculate common canvas boundaries for grid drawing
-    const canvasMinX = -originX / scale;
-    const canvasMinY = -originY / scale;
-    const canvasMaxX = canvasMinX + canvas.width / scale;
-    const canvasMaxY = canvasMinY + canvas.height / scale;
-
-    // Draw small grid lines
-    if (smallGridSize) {
-        c.strokeStyle = '#2B2F33';
-        c.lineWidth = 1 / scale;
-        let startX = Math.floor(canvasMinX / smallGridSize) * smallGridSize;
-        let startY = Math.floor(canvasMinY / smallGridSize) * smallGridSize;
-
-        for (let x = startX; x <= canvasMaxX; x += smallGridSize) {
-            c.beginPath();
-            c.moveTo(x, canvasMinY);
-            c.lineTo(x, canvasMaxY);
-            c.stroke();
-        }
-        for (let y = startY; y <= canvasMaxY; y += smallGridSize) {
-            c.beginPath();
-            c.moveTo(canvasMinX, y);
-            c.lineTo(canvasMaxX, y);
-            c.stroke();
+    handleMouseDown(e) {
+        if (e.button === 2) { // Right click - Start panning
+            this.startPanning(e);
+        } else if (e.button === 0) { // Left click - Start dragging rectangle
+            this.startDraggingRectangle(e);
+        } else if (e.button === 1) { // Middle click - Center canvas
+            this.centerOrigin();
+            this.scheduleRedraw();
         }
     }
 
-    // Draw large grid lines
-    const largeGridSize = 64;
-    c.strokeStyle = '#4C5259';
-    c.lineWidth = 1 / scale;
-    let startX = Math.floor(canvasMinX / largeGridSize) * largeGridSize;
-    let startY = Math.floor(canvasMinY / largeGridSize) * largeGridSize;
-
-    for (let x = startX; x <= canvasMaxX; x += largeGridSize) {
-        c.beginPath();
-        c.moveTo(x, canvasMinY);
-        c.lineTo(x, canvasMaxY);
-        c.stroke();
-    }
-    for (let y = startY; y <= canvasMaxY; y += largeGridSize) {
-        c.beginPath();
-        c.moveTo(canvasMinX, y);
-        c.lineTo(canvasMaxX, y);
-        c.stroke();
+    handleMouseMove(e) {
+        if (this.isPanning) {
+            this.updatePanning(e);
+        } else if (this.draggedRect) {
+            this.updateRectangleDrag(e);
+        }
     }
 
-    // Draw Origin Cross
-    const crossSize = 16;
-    c.strokeStyle = '#FFFFFF';
-    c.lineWidth = 1 / scale;
-    c.beginPath();
-    c.moveTo(-crossSize, 0);
-    c.lineTo(crossSize, 0);
-    c.moveTo(0, -crossSize);
-    c.lineTo(0, crossSize);
-    c.stroke();
-}
+    handleMouseUp(e) {
+        if (e.button === 2 && this.isPanning) {
+            this.isPanning = false;
+            this.canvas.style.cursor = 'default';
+        } else if (e.button === 0 && this.draggedRect) {
+            this.draggedRect.isDragging = false;
+            this.draggedRect = null;
+            this.canvas.style.cursor = 'default';
+        }
+    }
 
+    handleMouseOut() {
+        if (this.isPanning) {
+            this.isPanning = false;
+            this.canvas.style.cursor = 'default';
+        }
+        if (this.draggedRect) {
+            this.draggedRect.isDragging = false;
+            this.draggedRect = null;
+            this.canvas.style.cursor = 'default';
+        }
+    }
 
-// Rectangle Position, Size, Color, and Dragging Flag
-// (I have made the values divisble by 8, but this is not strictly nessesary)
-const rectangles = [
-    { x: -144, y: -120, width: 120, height: 160, color: '#ff6961', isDragging: false },
-    { x: 48,   y: -88,  width: 104, height: 96,  color: '#f8f38d', isDragging: false },
-    { x: -192, y: -48,  width: 128, height: 112, color: '#08cad1', isDragging: false },
-    { x: 72,   y: 16,   width: 112, height: 136, color: '#9d94ff', isDragging: false },
-    { x: -80,  y: 40,   width: 104, height: 104, color: '#c780e8', isDragging: false },
-    { x: 64,   y: -128, width: 144, height: 104, color: '#59adf6', isDragging: false },
-    { x: -56,  y: 72,   width: 120, height: 104, color: '#42d6a4', isDragging: false },
-    { x: -16,  y: -144, width: 96,  height: 80,  color: '#ffb480', isDragging: false }
-];
+    startPanning(e) {
+        this.isPanning = true;
+        this.dragOffset = {
+            x: e.clientX * this.pixelRatio - this.originX,
+            y: e.clientY * this.pixelRatio - this.originY
+        };
+        this.canvas.style.cursor = 'grabbing';
+    }
 
-// Draw the Rectangles and Display their Coordinates
-// (The Y-Axis has been normalized here)
-function drawRectangles() {
-    rectangles.forEach((rect) => {
-        c.fillStyle = rect.color;
-        c.fillRect(rect.x, rect.y, rect.width, rect.height);
-        c.font = '8px Arial';
-        c.fillStyle = '#000000';
-        c.fillText(`X: ${rect.x}, Y: ${rect.y * -1}`, rect.x + 5, rect.y + 10);
-    });
-}
+    updatePanning(e) {
+        if (!this.isPanning) return;
+        
+        this.originX = e.clientX * this.pixelRatio - this.dragOffset.x;
+        this.originY = e.clientY * this.pixelRatio - this.dragOffset.y;
+        this.scheduleRedraw();
+    }
 
-// Main Draw Function
-// (Calls all drawing functions and keeps the canvas clean)
-function draw() {
-    c.clearRect(0, 0, canvas.width, canvas.height);
-    c.save();
-    c.setTransform(scale, 0, 0, scale, originX, originY);
-    drawGrid();
-    drawRectangles();
-    c.restore();
-}
-
-// Mouse down event for dragging rectangles
-canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 0) { // Left mouse button for dragging rectangles
-        const canvasRect = canvas.getBoundingClientRect();
-        const mouseX = (e.clientX - canvasRect.left) * pixelRatio / scale - originX / scale;
-        const mouseY = (e.clientY - canvasRect.top) * pixelRatio / scale - originY / scale;
-
-        for (let i = rectangles.length - 1; i >= 0; i--) {
-            const rect = rectangles[i];
-            if (
-                mouseX >= rect.x &&
-                mouseX <= rect.x + rect.width &&
-                mouseY >= rect.y &&
-                mouseY <= rect.y + rect.height
-            ) {
-                draggedRect = rect;
-                offsetX = mouseX - rect.x;
-                offsetY = mouseY - rect.y;
+    startDraggingRectangle(e) {
+        const coords = this.getWorldCoordinates(e.clientX, e.clientY);
+        
+        // Search rectangles from top to bottom
+        for (let i = this.rectangles.length - 1; i >= 0; i--) {
+            const rect = this.rectangles[i];
+            if (rect.containsPoint(coords.x, coords.y)) {
+                this.draggedRect = rect;
+                this.dragOffset = {
+                    x: coords.x - rect.x,
+                    y: coords.y - rect.y
+                };
                 rect.isDragging = true;
-
-                rectangles.splice(i, 1);
-                rectangles.push(draggedRect);
-
-                canvas.style.cursor = 'grabbing'; // Set cursor to grabbing while dragging
+                
+                // Move rectangle to top
+                this.rectangles.splice(i, 1);
+                this.rectangles.push(rect);
+                
+                this.canvas.style.cursor = 'grabbing';
                 break;
             }
         }
     }
-});
 
-// Mouse move event for dragging rectangles
-canvas.addEventListener('mousemove', (e) => {
-    if (draggedRect && draggedRect.isDragging) {
-        const canvasRect = canvas.getBoundingClientRect();
-        const mouseX = (e.clientX - canvasRect.left) * pixelRatio / scale - originX / scale;
-        const mouseY = (e.clientY - canvasRect.top) * pixelRatio / scale - originY / scale;
-
-        draggedRect.x = Math.round((mouseX - offsetX) / 8) * 8;
-        draggedRect.y = Math.round((mouseY - offsetY) / 8) * 8;
-
-        draw();
+    updateRectangleDrag(e) {
+        if (!this.draggedRect) return;
+        
+        const coords = this.getWorldCoordinates(e.clientX, e.clientY);
+        this.draggedRect.x = coords.x - this.dragOffset.x;
+        this.draggedRect.y = coords.y - this.dragOffset.y;
+        this.draggedRect.snapToGrid();
+        
+        this.scheduleRedraw();
     }
-});
 
-// Mouse up event to stop dragging
-canvas.addEventListener('mouseup', () => {
-    if (draggedRect) {
-        draggedRect.isDragging = false;
-        draggedRect = null;
-        canvas.style.cursor = 'default'; // Reset cursor after dragging
+    draw() {
+        // Clear canvas and prepare transformation
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.save();
+        this.ctx.setTransform(this.scale, 0, 0, this.scale, this.originX, this.originY);
+        
+        // Draw grid and rectangles
+        this.gridRenderer.draw();
+        this.rectangles.forEach(rect => rect.draw(this.ctx));
+        
+        this.ctx.restore();
     }
-});
-
-// Handle middle mouse button click to center the canvas
-canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 1) {
-        centerOrigin();
-        draw();
-    }
-});
-
-// Redraw the Canvas if the Canvas Size Changes
-const resizeObserver = new ResizeObserver(() => {
-    resizecanvasToDisplaySize();
-    draw();
-});
-resizeObserver.observe(canvas);
-
-// Redraw the Canvas if the Window Size Changes
-window.addEventListener('resize', () => {
-    resizecanvasToDisplaySize();
-    draw();
-});
-
-// Initialize canvas and handle resizing
-function setupcanvas() {
-    resizecanvasToDisplaySize();
-    centerOrigin();
-    draw();
 }
-setupcanvas();
+
+// Initialize the canvas
+const canvas = new InteractiveCanvas('canvas');
