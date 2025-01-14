@@ -33,18 +33,154 @@ const CONFIG = {
 // Canvas State Class
 class CanvasState {
     constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d');
-        this.pixelRatio = window.devicePixelRatio || 1;
-        this.scale = CONFIG.CANVAS.INITIAL_SCALE * this.pixelRatio;
-        this.originX = 0;
-        this.originY = 0;
-        this.isPanning = false;
-        this.animationFrameId = null;
+        super(canvasId);
+        this.gridRenderer = new GridRenderer(this);
+        this.rectangles = this.initializeRectangles();
+        this.draggedRect = null;
+        this.dragOffset = { x: 0, y: 0 };
         
-        // Initialize canvas
-        this.setupCanvas();
-        this.initializeEventListeners();
+        // Touch-specific properties
+        this.isZooming = false;
+        this.lastTouchDist = 0;
+        this.lastTouchMidpoint = null;
+        this.doubleTapTimeout = null;
+        
+        // Initialize touch events if supported
+        if ('ontouchstart' in window) {
+            this.initializeTouchEvents();
+        }
+    }
+
+    initializeTouchEvents() {
+        this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this));
+        this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this));
+        this.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
+    }
+
+    handleTouchStart(e) {
+        e.preventDefault();
+
+        if (e.touches.length === 1) {
+            this.handleSingleTouchStart(e);
+        } else if (e.touches.length === 2) {
+            this.handlePinchStart(e);
+        }
+    }
+
+    handleSingleTouchStart(e) {
+        // Check for double tap
+        const currentTime = new Date().getTime();
+        if (this.doubleTapTimeout && 
+            currentTime - this.doubleTapTimeout < CONFIG.TOUCH.DOUBLE_TAP_DELAY) {
+            this.centerOrigin();
+            this.scheduleRedraw();
+            this.doubleTapTimeout = null;
+        } else {
+            this.doubleTapTimeout = currentTime;
+        }
+
+        // Check for rectangle dragging
+        const touch = e.touches[0];
+        const coords = this.getWorldCoordinates(touch.clientX, touch.clientY);
+
+        // Search rectangles from top to bottom
+        for (let i = this.rectangles.length - 1; i >= 0; i--) {
+            const rect = this.rectangles[i];
+            if (rect.containsPoint(coords.x, coords.y)) {
+                this.draggedRect = rect;
+                this.dragOffset = {
+                    x: coords.x - rect.x,
+                    y: coords.y - rect.y
+                };
+                rect.isDragging = true;
+
+                // Move rectangle to top
+                this.rectangles.splice(i, 1);
+                this.rectangles.push(rect);
+                break;
+            }
+        }
+    }
+
+    handlePinchStart(e) {
+        this.isZooming = true;
+        this.lastTouchDist = this.getTouchDistance(e);
+        this.lastTouchMidpoint = this.getTouchMidpoint(e);
+    }
+
+    handleTouchMove(e) {
+        e.preventDefault();
+
+        if (e.touches.length === 1 && this.draggedRect && this.draggedRect.isDragging) {
+            this.handleDragTouchMove(e);
+        } else if (e.touches.length === 2 && this.isZooming) {
+            this.handlePinchMove(e);
+        }
+    }
+
+    handleDragTouchMove(e) {
+        const touch = e.touches[0];
+        const coords = this.getWorldCoordinates(touch.clientX, touch.clientY);
+
+        this.draggedRect.x = coords.x - this.dragOffset.x;
+        this.draggedRect.y = coords.y - this.dragOffset.y;
+        this.draggedRect.snapToGrid();
+
+        this.scheduleRedraw();
+    }
+
+    handlePinchMove(e) {
+        const currentTouchDist = this.getTouchDistance(e);
+        const scaleFactor = currentTouchDist / this.lastTouchDist;
+
+        const midpoint = this.getTouchMidpoint(e);
+        const deltaX = (midpoint.x - this.lastTouchMidpoint.x) * this.pixelRatio;
+        const deltaY = (midpoint.y - this.lastTouchMidpoint.y) * this.pixelRatio;
+
+        // Calculate new scale while respecting bounds
+        const newScale = Math.max(
+            CONFIG.CANVAS.MIN_SCALE,
+            Math.min(this.scale * scaleFactor, CONFIG.CANVAS.MAX_SCALE)
+        );
+
+        // Update origin to maintain pinch center point
+        const mouseXInWorld = (midpoint.x * this.pixelRatio - this.originX) / this.scale;
+        const mouseYInWorld = (midpoint.y * this.pixelRatio - this.originY) / this.scale;
+
+        this.originX = midpoint.x * this.pixelRatio - mouseXInWorld * newScale + deltaX;
+        this.originY = midpoint.y * this.pixelRatio - mouseYInWorld * newScale + deltaY;
+
+        this.scale = newScale;
+        this.lastTouchDist = currentTouchDist;
+        this.lastTouchMidpoint = midpoint;
+
+        this.scheduleRedraw();
+    }
+
+    handleTouchEnd(e) {
+        if (this.draggedRect) {
+            this.draggedRect.isDragging = false;
+            this.draggedRect = null;
+        }
+
+        if (this.isZooming && e.touches.length < 2) {
+            this.isZooming = false;
+            this.lastTouchDist = 0;
+            this.lastTouchMidpoint = null;
+        }
+    }
+
+    getTouchDistance(e) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    getTouchMidpoint(e) {
+        return {
+            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
     }
 
     setupCanvas() {
